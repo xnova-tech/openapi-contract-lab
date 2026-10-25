@@ -12,21 +12,34 @@ from jsonschema import Draft202012Validator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.contract_document import ContractError, at_path, load_contract, response_contract  # noqa: E402
+from scripts.case_mode import Case, read_case  # noqa: E402
+from scripts.contract_document import ContractError, load_contract, request_contract, response_contract  # noqa: E402
 from scripts.probes import BASELINE_PROBES, PREFIX_PROBE, Probe  # noqa: E402
 
 
-def _requires_prefix(document: Mapping[str, object]) -> bool:
-    schema = at_path(document, "components", "schemas", "CreateOrder", "properties", "external_id")
-    return isinstance(schema, dict) and schema.get("pattern") == "^ORD-"
+def _check_request(document: Mapping[str, object], probe: Probe, status: int) -> None:
+    if probe.body is None:
+        return
+    schema = request_contract(document, probe.path_template, probe.method)
+    errors = sorted(Draft202012Validator(schema).iter_errors(probe.body), key=lambda error: str(error.path))
+    if status == 422 and not errors:
+        raise ContractError(f"{probe.label}: requestBody accepts the input, but HTTP returned 422")
+    if status != 422 and errors:
+        first = errors[0]
+        pointer = "/" + "/".join(str(part) for part in first.absolute_path)
+        raise ContractError(f"{probe.label}: requestBody rejects JSON {pointer}, but HTTP returned {status}: {first.message}")
 
 
 def check_response(client: httpx.Client, document: Mapping[str, object], probe: Probe) -> object:
     operation = f"{probe.method.upper()} {probe.path_template} [{probe.label}]"
-    description, schema = response_contract(document, probe.path_template, probe.method, probe.status)
     response = client.request(probe.method.upper(), probe.path, json=probe.body, params=probe.query)
     if response.status_code != probe.status:
         raise ContractError(f"{operation}: expected HTTP {probe.status}, got {response.status_code}: {response.text}")
+    _check_request(document, probe, response.status_code)
+    try:
+        schema = response_contract(document, probe.path_template, probe.method, response.status_code)
+    except ContractError as exc:
+        raise ContractError(f"{operation}: HTTP {response.status_code} observed; {exc}") from exc
     media_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
     if media_type != "application/json":
         raise ContractError(f"{operation}: expected application/json, got {media_type!r}")
@@ -39,11 +52,6 @@ def check_response(client: httpx.Client, document: Mapping[str, object], probe: 
         first = errors[0]
         pointer = "/" + "/".join(str(part) for part in first.absolute_path)
         raise ContractError(f"{operation}: JSON {pointer}: {first.message}")
-    if probe.status >= 400 and isinstance(payload, dict):
-        if payload.get("message") != description:
-            raise ContractError(
-                f"{operation}: description {description!r} differs from HTTP message {payload.get('message')!r}"
-            )
     return payload
 
 
@@ -60,7 +68,7 @@ def _substitute(probe: Probe, run_id: str, order_id: int | None) -> Probe:
 def check_contract(spec: Path, base_url: str) -> int:
     try:
         document = load_contract(spec)
-        probes = (*BASELINE_PROBES, *((PREFIX_PROBE,) if _requires_prefix(document) else ()))
+        probes = (*BASELINE_PROBES, *((PREFIX_PROBE,) if read_case(spec) is Case.FINAL else ()))
         run_id = uuid4().hex[:12]
         order_id: int | None = None
         with httpx.Client(base_url=base_url, timeout=5, trust_env=False) as client:

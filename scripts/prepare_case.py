@@ -2,21 +2,16 @@
 
 import argparse
 import shutil
-from enum import StrEnum
+import sys
 from pathlib import Path
 from typing import cast
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
-
-class Case(StrEnum):
-    STATUS = "status"
-    TYPE = "type"
-    REQUIRED = "required"
-    CONFLICT = "conflict"
-    FINAL = "final"
+from scripts.case_mode import CASE_MARKER, Case  # noqa: E402
 
 
 def _object(value: object) -> dict[str, object]:
@@ -43,7 +38,9 @@ def _break_contract(document: dict[str, object], case: Case) -> None:
     elif case is Case.REQUIRED:
         order["required"] = ["id", "external_id", "quantity", "status", "warehouse"]
     elif case is Case.CONFLICT:
-        _at(document, "paths", "/orders", "post", "responses", "409")["description"] = "Duplicate external ID was accepted"
+        _at(document, "paths", "/orders", "post", "responses", "409", "content", "application/json", "schema")["$ref"] = (
+            "#/components/schemas/TransitionError"
+        )
     elif case is Case.FINAL:
         _at(schemas, "CreateOrder", "properties", "external_id")["pattern"] = "^ORD-"
         order["required"] = ["id", "external_id", "quantity", "status", "warehouse"]
@@ -62,12 +59,13 @@ def prepare(case: Case, destination: Path) -> Path:
         document = _object(yaml.safe_load(source))
     _break_contract(document, case)
     spec.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    (destination / CASE_MARKER).write_text(f"{case.value}\n", encoding="utf-8")
     return destination
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("case", choices=[case.value for case in Case])
+    parser.add_argument("case", choices=[case.value for case in Case if case is not Case.BASELINE])
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     case = Case(args.case)

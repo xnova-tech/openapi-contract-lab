@@ -103,9 +103,7 @@ def load_contract(path: Path) -> Mapping[str, object]:
         raise ContractError(f"Invalid OpenAPI document {path}: {exc}") from exc
 
 
-def response_contract(
-    document: Mapping[str, object], path_template: str, method: str, status: int
-) -> tuple[str, Mapping[str, object]]:
+def response_contract(document: Mapping[str, object], path_template: str, method: str, status: int) -> Mapping[str, object]:
     response = as_mapping(
         at_path(document, "paths", path_template, method, "responses", str(status)),
         f"{method.upper()} {path_template} {status}",
@@ -119,4 +117,15 @@ def response_contract(
     if not isinstance(description, str):
         raise ContractError(f"{method.upper()} {path_template} {status}: missing description")
     schema = at_path(response, "content", "application/json", "schema")
-    return description, resolve_schema(document, schema)
+    return resolve_schema(document, schema)
+
+
+def request_contract(document: Mapping[str, object], path_template: str, method: str) -> Mapping[str, object]:
+    request_body = as_mapping(at_path(document, "paths", path_template, method, "requestBody"), "requestBody")
+    if "$ref" in request_body:
+        reference = request_body["$ref"]
+        if not isinstance(reference, str):
+            raise ContractError("requestBody $ref must be a string")
+        request_body = as_mapping(_resolve_pointer(document, reference), reference)
+    schema = at_path(request_body, "content", "application/json", "schema")
+    return resolve_schema(document, schema)

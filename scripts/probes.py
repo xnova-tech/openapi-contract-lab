@@ -18,6 +18,7 @@ BASELINE_PROBES = (
     Probe("health", "get", "/health", "/health", 200),
     Probe("list", "get", "/orders", "/orders", 200),
     Probe("create", "post", "/orders", "/orders", 201, {"external_id": "ORD-{run_id}", "quantity": 2}),
+    Probe("minimum quantity", "post", "/orders", "/orders", 201, {"external_id": "ORD-min-{run_id}", "quantity": 1}),
     Probe("get", "get", "/orders/{order_id}", "/orders/{order_id}", 200),
     Probe("query", "get", "/orders", "/orders", 200, query=(("status", "new"),)),
     Probe(
@@ -36,6 +37,9 @@ BASELINE_PROBES = (
         422,
         {"external_id": "ORD-invalid-{run_id}", "quantity": 0},
     ),
+    Probe("missing quantity", "post", "/orders", "/orders", 422, {"external_id": "ORD-missing-{run_id}"}),
+    Probe("invalid quantity type", "post", "/orders", "/orders", 422, {"external_id": "ORD-type-{run_id}", "quantity": "1"}),
+    Probe("empty external ID", "post", "/orders", "/orders", 422, {"external_id": "", "quantity": 1}),
     Probe(
         "confirm",
         "patch",
