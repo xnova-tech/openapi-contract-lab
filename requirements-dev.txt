@@ -1,0 +1,5 @@
+-r requirements.txt
+mypy==2.4.0
+ruff==0.16.10
+types-PyYAML==6.0.12.20250915
+types-jsonschema==4.26.0.20261006

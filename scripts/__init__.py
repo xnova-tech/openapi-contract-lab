@@ -1,0 +1,1 @@
+"""Command-line contract checks."""
