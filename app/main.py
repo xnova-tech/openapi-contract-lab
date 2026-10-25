@@ -11,16 +11,16 @@ from app.store import OrderStore
 SPEC_PATH = Path(__file__).resolve().parents[1] / "spec" / "openapi.yaml"
 
 
-def create_app(store: OrderStore | None = None) -> FastAPI:
-    orders = store if store is not None else OrderStore.fresh()
-    api = FastAPI(title="Order Contract Lab", version="1.0.0")
-
-    def authored_openapi() -> dict[str, object]:
+class AuthoredContractApp(FastAPI):
+    def openapi(self) -> dict[str, object]:
         with SPEC_PATH.open(encoding="utf-8") as source:
             document: dict[str, object] = yaml.safe_load(source)
         return document
 
-    api.openapi = authored_openapi  # type: ignore[method-assign]
+
+def create_app(store: OrderStore | None = None) -> FastAPI:
+    orders = store if store is not None else OrderStore.fresh()
+    api = AuthoredContractApp(title="Order Contract Lab", version="1.0.0")
     install_validation_handler(api)
     install_routes(api, orders)
     return api

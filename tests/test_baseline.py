@@ -49,6 +49,7 @@ def test_error_paths_have_one_shape(client: TestClient) -> None:
             "validation_error",
         ),
         (client.get("/orders/99"), 404, "not_found"),
+        (client.get("/orders/0"), 422, "validation_error"),
         (client.get("/orders/not-an-int"), 422, "validation_error"),
         (
             client.patch("/orders/1/status", json={"status": "new"}),
@@ -56,6 +57,7 @@ def test_error_paths_have_one_shape(client: TestClient) -> None:
             "invalid_status_transition",
         ),
         (client.patch("/orders/1/status", json={"status": "other"}), 422, "validation_error"),
+        (client.patch("/orders/0/status", json={"status": "new"}), 422, "validation_error"),
     ]
     for response, status, code in examples:
         assert response.status_code == status

@@ -1,6 +1,8 @@
 """Thin HTTP adapters around the in-memory order store."""
 
-from fastapi import FastAPI, Request
+from typing import Annotated
+
+from fastapi import FastAPI, Path, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -35,7 +37,7 @@ def _install_read_routes(api: FastAPI, orders: OrderStore) -> None:
         return orders.list(status)
 
     @api.get("/orders/{order_id}", response_model=None)
-    def get_order(order_id: int) -> Order | JSONResponse:
+    def get_order(order_id: Annotated[int, Path(ge=1)]) -> Order | JSONResponse:
         try:
             return orders.get(order_id)
         except OrderNotFound:
@@ -53,7 +55,7 @@ def _install_write_routes(api: FastAPI, orders: OrderStore) -> None:
             return _error(409, "duplicate_external_id", "External ID already exists")
 
     @api.patch("/orders/{order_id}/status", response_model=None)
-    def change_status(order_id: int, request: ChangeStatus) -> Order | JSONResponse:
+    def change_status(order_id: Annotated[int, Path(ge=1)], request: ChangeStatus) -> Order | JSONResponse:
         try:
             return orders.change_status(order_id, request.status)
         except OrderNotFound:

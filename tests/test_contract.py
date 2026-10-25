@@ -39,14 +39,24 @@ def test_baseline_is_green_against_real_http(live_url: str) -> None:
     assert "PASS duplicate" in output
 
 
-@pytest.mark.parametrize("case", list(Case))
-def test_broken_cases_are_red_against_real_http(case: Case, live_url: str, tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("case", "marker"),
+    [
+        (Case.STATUS, "201"),
+        (Case.TYPE, "quantity"),
+        (Case.REQUIRED, "warehouse"),
+        (Case.CONFLICT, "description"),
+        (Case.FINAL, "warehouse"),
+    ],
+)
+def test_broken_cases_are_red_against_real_http(case: Case, marker: str, live_url: str, tmp_path: Path) -> None:
     copy = prepare(case, tmp_path / case.value)
     spec = copy / "spec" / "openapi.yaml"
     load_contract(spec)
     code, output = _run_checker(spec, live_url)
     assert code != 0, f"{case} unexpectedly passed: {output}"
     assert "FAIL" in output
+    assert marker in output
 
 
 def test_missing_local_reference_is_rejected(tmp_path: Path) -> None:
